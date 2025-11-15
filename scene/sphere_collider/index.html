@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Cloth Basic</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div id="layout">
+      <div id="canvasContainer">
+        <div id="canvas"></div>
+      </div>
+
+      <div id="controls">
+        <h2>Cloth Controls</h2>
+
+        <div class="section">
+          <button id="buttonRun">Run</button>
+          <button id="buttonStep">Step</button>
+          <button id="buttonReset">Reset</button>
+        </div>
+
+        <div class="section">
+          <h3>View</h3>
+          <label>
+            <input type="checkbox" id="showEdges" />
+            Show edges
+          </label>
+        </div>
+
+        <div class="section">
+          <h3>Stats</h3>
+          <div class="stat-row">
+            <span class="stat-label">Triangles</span>
+            <span class="stat-value" id="numTris">0</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Vertices</span>
+            <span class="stat-value" id="numVerts">0</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Frames</span>
+            <span class="stat-value" id="frames">0</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Sim Frame time</span>
+            <span class="stat-value"><span id="ms">0.000</span> ms</span>
+          </div>
+        </div>
+
+        <div class="section">
+          <h3>Constraints</h3>
+
+          <!-- Edge Stretching -->
+          <div class="constraint-block">
+            <div class="constraint-header">
+              <label>
+                <input
+                  type="checkbox"
+                  id="constraint-edge-stretching-enable"
+                  checked
+                />
+                Stretch (Edges)
+              </label>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              value="1.0"
+              id="constraint-edge-stretching-stiffness-slider"
+              class="slider"
+            />
+            <div class="value-label">
+              Stiffness:
+              <span id="constraint-edge-stretching-stiffness-value">1.00</span>
+            </div>
+          </div>
+
+          <!-- Triangle Angle -->
+          <div class="constraint-block">
+            <div class="constraint-header">
+              <label>
+                <input
+                  type="checkbox"
+                  id="constraint-diagonal-shear-enable"
+                  checked
+                />
+                Shear (Diagonal)
+              </label>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              value="1.0"
+              id="constraint-diagonal-shear-stiffness-slider"
+              class="slider"
+            />
+            <div class="value-label">
+              Stiffness:
+              <span id="constraint-diagonal-shear-stiffness-value">1.00</span>
+            </div>
+          </div>
+
+          <!-- Isometric Bending -->
+          <div class="constraint-block">
+            <div class="constraint-header">
+              <label>
+                <input
+                  type="checkbox"
+                  id="constraint-isometric-bending-enable"
+                  checked
+                />
+                Bending (Isometric)
+              </label>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              value="1.0"
+              id="constraint-isometric-bending-stiffness-slider"
+              class="slider"
+            />
+            <div class="value-label">
+              Stiffness:
+              <span id="constraint-isometric-bending-stiffness-value"
+                >1.00</span
+              >
+            </div>
+          </div>
+
+          <!-- Hinge Bending -->
+          <div class="constraint-block">
+            <div class="constraint-header">
+              <label>
+                <input
+                  type="checkbox"
+                  id="constraint-hinge-bending-enable"
+                  checked
+                />
+                Bending (Hinge)
+              </label>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              value="1.0"
+              id="constraint-hinge-bending-stiffness-slider"
+              class="slider"
+            />
+            <div class="value-label">
+              Stiffness:
+              <span id="constraint-hinge-bending-stiffness-value">1.00</span>
+            </div>
+          </div>
+
+          <!-- Diagonal Bending -->
+          <div class="constraint-block">
+            <div class="constraint-header">
+              <label>
+                <input
+                  type="checkbox"
+                  id="constraint-diagonal-bending-enable"
+                />
+                Bending (Diagonal)
+              </label>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              value="1.0"
+              id="constraint-diagonal-bending-stiffness-slider"
+              class="slider"
+            />
+            <div class="value-label">
+              Stiffness:
+              <span id="constraint-diagonal-bending-stiffness-value">1.00</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.181.1/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.181.1/examples/jsm/"
+        }
+      }
+    </script>
+    <script type="module">
+      import * as THREE from "three";
+      import { buildGridMesh } from "../../core/geometry/mesh_builder.js";
+      import { Cloth } from "../../core/physics/cloth.js";
+      import { Sphere } from "../../core/physics/sphere.js";
+      import { PhysicsScene } from "./physics.js";
+      import { ThreeScene } from "../../ui/scene.js";
+      import { Grabber } from "../../ui/grabber.js";
+      import { ConstraintContext } from "../../core/constraints/base.js";
+      import { EdgeStretchingConstraints } from "../../core/constraints/pbd/edge_stretching.js";
+      import { IsometricBendingConstraints } from "../../core/constraints/pbd/isometric_bending.js";
+      import { HingeBendingConstraints } from "../../core/constraints/pbd/hinge_bending.js";
+      import { DiagonalBendingConstraints } from "../../core/constraints/pbd/diagonal_bending.js";
+      import { DiagonalShearConstraints } from "../../core/constraints/pbd/diagonal_shear.js";
+      import { SphereVertexCollisionConstraints } from "../../core/constraints/pbd/sphere_vertex_collision.js";
+      import { SphereTriangleCollisionConstraints } from "../../core/constraints/pbd/sphere_triangle_collision.js";
+
+      const canvas = document.getElementById("canvas");
+
+      // --- Global variables --------------------------------------------
+      const gPhysics = new PhysicsScene({
+        gravity: [0.0, -10.0, 0.0],
+        dt: 1.0 / 60.0,
+        numSubsteps: 10,
+      });
+
+      const gThreeScene = new ThreeScene(canvas);
+
+      const gGrabber = new Grabber({
+        canvas: canvas,
+        threeScene: gThreeScene,
+        physics: gPhysics,
+        rendererElement: gThreeScene.renderer.domElement,
+        runSimulationFunc: () => {
+          for (var i = 0; i < gPhysics.objects.length; i++) {
+            gPhysics.objects[i].endFrame();
+          }
+        },
+      });
+
+      //  --- Event handlers -------------------------------------------
+      function onWindowResize() {
+        gThreeScene.camera.aspect =
+          (window.innerWidth -
+            document.getElementById("controls").offsetWidth) /
+          window.innerHeight;
+        gThreeScene.camera.updateProjectionMatrix();
+        gThreeScene.renderer.setSize(
+          window.innerWidth - document.getElementById("controls").offsetWidth,
+          window.innerHeight
+        );
+      }
+      window.addEventListener("resize", onWindowResize, false);
+
+      function onToggleEdges(e) {
+        gPhysics.showEdges(e.target.checked);
+      }
+
+      function toggleSimulation() {
+        const button = document.getElementById("buttonRun");
+        if (gPhysics.state.paused) {
+          button.innerHTML = "Stop";
+        } else {
+          button.innerHTML = "Run";
+        }
+        gPhysics.state.paused = !gPhysics.state.paused;
+      }
+
+      function stepSimulation() {
+        gPhysics.step({
+          onSimulationStep: (dt) => {
+            gGrabber.increaseTime(dt);
+            document.getElementById("frames").innerHTML =
+              gPhysics.state.frameSum;
+          },
+          onUpdateFrameTime: (ms) => {
+            document.getElementById("ms").innerHTML = ms.toFixed(3);
+          },
+        });
+      }
+
+      function runSimulation() {
+        const button = document.getElementById("buttonRun");
+        if (gPhysics.state.paused) {
+          button.innerHTML = "Stop";
+          gPhysics.state.paused = false;
+        }
+      }
+
+      function resetMesh() {
+        gClothObj.resetSimulation();
+        for (var i = 0; i < gPhysics.objects.length; i++) {
+          gPhysics.objects[i].endFrame();
+        }
+      }
+
+      function simulationLoop() {
+        if (gPhysics.state.paused) {
+          gThreeScene.renderFrame();
+        } else {
+          stepSimulation();
+          gThreeScene.renderFrame();
+        }
+        requestAnimationFrame(simulationLoop);
+      }
+
+      // --- Setup scene ----------------------------------------------------
+      const clothWidth = 1.5;
+      const clothHeight = 1.5;
+      const cols = 60;
+      const rows = Math.round((cols * clothHeight) / clothWidth);
+      const clothMesh = buildGridMesh({
+        cols,
+        rows,
+        width: clothWidth,
+        height: clothHeight,
+        origin: [0.0, 1.25, 0.0],
+        angle: Math.PI / 2,
+      });
+
+      let minX = Number.MAX_VALUE;
+      let maxX = -Number.MAX_VALUE;
+      let minZ = Number.MAX_VALUE;
+      let maxZ = -Number.MAX_VALUE;
+      const numVertices = clothMesh.vertices.length / 3;
+      for (let i = 0; i < numVertices; i++) {
+        const x = clothMesh.vertices[3 * i + 0];
+        const z = clothMesh.vertices[3 * i + 2];
+        minX = Math.min(minX, x);
+        maxX = Math.max(maxX, x);
+        minZ = Math.min(minZ, z);
+        maxZ = Math.max(maxZ, z);
+      }
+      const centerX = 0.5 * (minX + maxX);
+      const centerZ = 0.5 * (minZ + maxZ);
+      let closestDist = Number.MAX_VALUE;
+      let closestVertexId = -1;
+      const attachVertexIds = [];
+      for (let i = 0; i < numVertices; i++) {
+        const x = clothMesh.vertices[3 * i + 0];
+        const z = clothMesh.vertices[3 * i + 2];
+        const dist = Math.sqrt(
+          (x - centerX) * (x - centerX) + (z - centerZ) * (z - centerZ)
+        );
+        if (dist < closestDist) {
+          closestDist = dist;
+          closestVertexId = i;
+        }
+      }
+
+      const gClothObj = new Cloth({
+        mesh: clothMesh,
+        scene: gThreeScene.scene,
+        attachVertexIds: [closestVertexId],
+      });
+      const gSphereObj = new Sphere({
+        radius: 0.25,
+        center: [0.0, 1.0, 0.0],
+        scene: gThreeScene.scene,
+        invMass: 0.0, // 完全固定
+      });
+      gPhysics.addObject(gClothObj);
+      gPhysics.addSphereCollider(gSphereObj);
+      gPhysics.showEdges(gPhysics.view.showEdges);
+
+      // --- Constraints / contexts ----------------------------------------
+      const constraintConfigs = [
+        {
+          id: "edge-stretching",
+          solver: new EdgeStretchingConstraints(
+            new ConstraintContext({
+              restPos: gClothObj.pos,
+              invMass: gClothObj.invMass,
+              edgeVertexIds: gClothObj.edgeVertexIds,
+              stiffness: 0.5,
+            })
+          ),
+          enabled: true,
+        },
+        {
+          id: "diagonal-shear",
+          solver: new DiagonalShearConstraints(
+            new ConstraintContext({
+              restPos: gClothObj.pos,
+              invMass: gClothObj.invMass,
+              bendingVertexIds: gClothObj.bendingVertexIds,
+              stiffness: 0.5,
+            })
+          ),
+          enabled: true,
+        },
+        {
+          id: "isometric-bending",
+          solver: new IsometricBendingConstraints(
+            new ConstraintContext({
+              restPos: gClothObj.pos,
+              invMass: gClothObj.invMass,
+              bendingVertexIds: gClothObj.bendingVertexIds,
+              stiffness: 0.5,
+            })
+          ),
+          enabled: true,
+        },
+        {
+          id: "hinge-bending",
+          solver: new HingeBendingConstraints(
+            new ConstraintContext({
+              restPos: gClothObj.pos,
+              invMass: gClothObj.invMass,
+              bendingVertexIds: gClothObj.bendingVertexIds,
+              stiffness: 0.5,
+            })
+          ),
+          enabled: false,
+        },
+        {
+          id: "diagonal-bending",
+          solver: new DiagonalBendingConstraints(
+            new ConstraintContext({
+              restPos: gClothObj.pos,
+              invMass: gClothObj.invMass,
+              bendingVertexIds: gClothObj.bendingVertexIds,
+              stiffness: 0.5,
+            })
+          ),
+          enabled: false,
+        },
+      ];
+
+      gClothObj.setColliderConstraintSolvers([
+        // new SphereVertexCollisionConstraints(
+        //   new ConstraintContext({
+        //     restPos: gClothObj.pos,
+        //     invMass: gClothObj.invMass,
+        //     vertexIds: clothMesh.vertexIds,
+        //     stiffness: 1.0,
+        //     mode: "outside",
+        //   })
+        // ),
+        new SphereTriangleCollisionConstraints(
+          new ConstraintContext({
+            restPos: gClothObj.pos,
+            invMass: gClothObj.invMass,
+            triangleVertexIds: clothMesh.faceTriIds,
+            stiffness: 1.0,
+            mode: "outside",
+          })
+        ),
+      ]);
+
+      function updateConstraintSolvers() {
+        const activeSolvers = constraintConfigs
+          .filter((c) => c.enabled)
+          .map((c) => c.solver);
+        gClothObj.setConstraintSolvers(activeSolvers);
+      }
+
+      // 初期セット
+      updateConstraintSolvers();
+
+      // --- Setup UI -------------------------------------------------------
+      document.getElementById("numTris").innerHTML =
+        clothMesh.faceTriIds.length / 3;
+      document.getElementById("numVerts").innerHTML =
+        clothMesh.vertices.length / 3;
+      document.getElementById("showEdges").checked = gPhysics.view.showEdges;
+
+      // constraint UI のイベント設定
+      constraintConfigs.forEach((cfg) => {
+        const checkbox = document.getElementById(
+          "constraint-" + cfg.id + "-enable"
+        );
+        const slider = document.getElementById(
+          "constraint-" + cfg.id + "-stiffness-slider"
+        );
+        const valueLabel = document.getElementById(
+          "constraint-" + cfg.id + "-stiffness-value"
+        );
+
+        if (checkbox) {
+          checkbox.checked = cfg.enabled;
+          checkbox.addEventListener("change", (e) => {
+            cfg.enabled = e.target.checked;
+            updateConstraintSolvers();
+          });
+        }
+
+        if (slider) {
+          // 初期値
+          slider.value = cfg.solver.stiffness;
+          if (valueLabel) {
+            valueLabel.textContent = parseFloat(slider.value).toFixed(2);
+          }
+
+          slider.addEventListener("input", (e) => {
+            const v = parseFloat(e.target.value);
+            cfg.solver.setStiffness(v);
+            if (valueLabel) {
+              valueLabel.textContent = v.toFixed(2);
+            }
+          });
+        }
+      });
+
+      // --- Add event listeners -------------------------------------------
+      document
+        .getElementById("buttonRun")
+        .addEventListener("click", toggleSimulation);
+
+      document
+        .getElementById("buttonStep")
+        .addEventListener("click", stepSimulation);
+
+      document
+        .getElementById("buttonReset")
+        .addEventListener("click", resetMesh);
+
+      document
+        .getElementById("showEdges")
+        .addEventListener("change", onToggleEdges);
+
+      // --- Start simulation loop -----------------------------------------
+      onWindowResize();
+      simulationLoop();
+      toggleSimulation();
+    </script>
+  </body>
+</html>
